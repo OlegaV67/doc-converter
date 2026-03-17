@@ -1,2 +1,4 @@
 customtkinter>=5.2.0
 tkinterdnd2>=0.3.0
+PyJWT>=2.10.0
+requests>=2.32.0

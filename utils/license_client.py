@@ -1,0 +1,141 @@
+"""
+License client: fingerprint generation, activation, token storage and validation.
+"""
+
+import hashlib
+import hmac
+import json
+import os
+import platform
+import subprocess
+import sys
+from pathlib import Path
+
+import jwt
+import requests
+
+# ---------------------------------------------------------------------------
+# Configuration — update SERVER_URL after deploying to Railway
+# ---------------------------------------------------------------------------
+SERVER_URL = os.getenv("LICENSE_SERVER", "https://doc-converter-license.up.railway.app")
+JWT_SECRET = "REPLACE_WITH_SAME_SECRET_AS_SERVER"  # embedded public secret for offline validation
+TOKEN_FILE = Path(os.getenv("APPDATA", Path.home())) / "DocConverter" / "license.json"
+
+TIMEOUT = 8  # seconds
+
+
+# ---------------------------------------------------------------------------
+# Machine fingerprint
+# ---------------------------------------------------------------------------
+
+def _get_windows_id() -> str:
+    """Read MachineGuid from registry (stable across reboots)."""
+    try:
+        result = subprocess.check_output(
+            ["reg", "query",
+             r"HKLM\SOFTWARE\Microsoft\Cryptography",
+             "/v", "MachineGuid"],
+            stderr=subprocess.DEVNULL,
+        ).decode()
+        for line in result.splitlines():
+            if "MachineGuid" in line:
+                return line.split()[-1]
+    except Exception:
+        pass
+    return ""
+
+
+def _get_mac() -> str:
+    import uuid
+    return str(uuid.getnode())
+
+
+def get_fingerprint() -> str:
+    """
+    Returns a stable machine fingerprint as a hex string.
+    Combines: Windows MachineGuid + MAC address + machine node name.
+    """
+    parts = [
+        _get_windows_id(),
+        _get_mac(),
+        platform.node(),
+    ]
+    raw = "|".join(parts)
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Token storage
+# ---------------------------------------------------------------------------
+
+def _load_token() -> str | None:
+    try:
+        data = json.loads(TOKEN_FILE.read_text())
+        return data.get("token")
+    except Exception:
+        return None
+
+
+def _save_token(token: str) -> None:
+    TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    TOKEN_FILE.write_text(json.dumps({"token": token}))
+
+
+# ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
+
+def _validate_token_offline(token: str, fingerprint: str) -> bool:
+    """Validate JWT signature and fingerprint match without network."""
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        expected_fp = hashlib.sha256(fingerprint.encode()).hexdigest()
+        return payload.get("fp") == expected_fp and payload.get("iss") == "doc-converter"
+    except jwt.InvalidTokenError:
+        return False
+
+
+def check_license() -> bool:
+    """
+    Returns True if the machine has a valid license.
+    Validates offline (JWT signature + fingerprint).
+    """
+    token = _load_token()
+    if not token:
+        return False
+    return _validate_token_offline(token, get_fingerprint())
+
+
+# ---------------------------------------------------------------------------
+# Activation
+# ---------------------------------------------------------------------------
+
+class ActivationError(Exception):
+    pass
+
+
+def activate(key: str) -> None:
+    """
+    Send activation request to server.
+    On success, saves the token locally.
+    Raises ActivationError with a human-readable message on failure.
+    """
+    fp = get_fingerprint()
+    try:
+        resp = requests.post(
+            f"{SERVER_URL}/activate",
+            json={"key": key.strip(), "fingerprint": fp},
+            timeout=TIMEOUT,
+        )
+    except requests.exceptions.ConnectionError:
+        raise ActivationError("Не удалось подключиться к серверу активации.\nПроверьте подключение к интернету.")
+    except requests.exceptions.Timeout:
+        raise ActivationError("Сервер не отвечает. Попробуйте позже.")
+
+    if resp.status_code == 200:
+        token = resp.json()["token"]
+        _save_token(token)
+        return
+
+    detail = resp.json().get("detail", "Неизвестная ошибка")
+    raise ActivationError(detail)
