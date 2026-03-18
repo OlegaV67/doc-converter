@@ -19,7 +19,16 @@ import requests
 # ---------------------------------------------------------------------------
 SERVER_URL = os.getenv("LICENSE_SERVER", "https://doc-converter-license-production.up.railway.app")
 JWT_SECRET = "c499469ef8a6150565cedfcdd6f20ca9c6f9bab09bbbcdd8c0f93e1c4715d813"
-TOKEN_FILE = Path(os.getenv("APPDATA", Path.home())) / "DocConverter" / "license.json"
+
+def _app_data_dir() -> Path:
+    if platform.system() == "Windows":
+        return Path(os.environ.get("APPDATA", Path.home())) / "DocConverter"
+    elif platform.system() == "Darwin":
+        return Path.home() / "Library" / "Application Support" / "DocConverter"
+    else:
+        return Path.home() / ".config" / "DocConverter"
+
+TOKEN_FILE = _app_data_dir() / "license.json"
 
 TIMEOUT = 8  # seconds
 
@@ -28,20 +37,37 @@ TIMEOUT = 8  # seconds
 # Machine fingerprint
 # ---------------------------------------------------------------------------
 
-def _get_windows_id() -> str:
-    """Read MachineGuid from registry (stable across reboots)."""
-    try:
-        result = subprocess.check_output(
-            ["reg", "query",
-             r"HKLM\SOFTWARE\Microsoft\Cryptography",
-             "/v", "MachineGuid"],
-            stderr=subprocess.DEVNULL,
-        ).decode()
-        for line in result.splitlines():
-            if "MachineGuid" in line:
-                return line.split()[-1]
-    except Exception:
-        pass
+def _get_machine_id() -> str:
+    """Get stable machine ID cross-platform."""
+    sys_name = platform.system()
+    if sys_name == "Windows":
+        try:
+            result = subprocess.check_output(
+                ["reg", "query", r"HKLM\SOFTWARE\Microsoft\Cryptography", "/v", "MachineGuid"],
+                stderr=subprocess.DEVNULL,
+            ).decode()
+            for line in result.splitlines():
+                if "MachineGuid" in line:
+                    return line.split()[-1]
+        except Exception:
+            pass
+    elif sys_name == "Darwin":
+        try:
+            result = subprocess.check_output(
+                ["ioreg", "-rd1", "-c", "IOPlatformExpertDevice"],
+                stderr=subprocess.DEVNULL,
+            ).decode()
+            for line in result.splitlines():
+                if "IOPlatformUUID" in line:
+                    return line.split('"')[-2]
+        except Exception:
+            pass
+    else:
+        for path in ["/etc/machine-id", "/var/lib/dbus/machine-id"]:
+            try:
+                return Path(path).read_text().strip()
+            except Exception:
+                pass
     return ""
 
 
@@ -53,10 +79,10 @@ def _get_mac() -> str:
 def get_fingerprint() -> str:
     """
     Returns a stable machine fingerprint as a hex string.
-    Combines: Windows MachineGuid + MAC address + machine node name.
+    Cross-platform: Windows MachineGuid / macOS IOPlatformUUID / Linux machine-id.
     """
     parts = [
-        _get_windows_id(),
+        _get_machine_id(),
         _get_mac(),
         platform.node(),
     ]

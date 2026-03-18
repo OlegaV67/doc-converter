@@ -108,9 +108,16 @@ class App(_AppBase):
         self._build_ui()
 
     def _check_deps(self):
-        import json
+        import json, platform as _platform
         from pathlib import Path
-        flag_file = Path(os.getenv("APPDATA", Path.home())) / "DocConverter" / "deps_warned.json"
+        _sys = _platform.system()
+        if _sys == "Windows":
+            _base = Path(os.environ.get("APPDATA", Path.home()))
+        elif _sys == "Darwin":
+            _base = Path.home() / "Library" / "Application Support"
+        else:
+            _base = Path.home() / ".config"
+        flag_file = _base / "DocConverter" / "deps_warned.json"
 
         absent = missing_deps()
         if not absent:
@@ -368,8 +375,14 @@ class App(_AppBase):
 
     def _open_output_folder(self):
         if self._last_output_dir and self._last_output_dir.exists():
-            import subprocess
-            subprocess.Popen(["explorer", str(self._last_output_dir)])
+            import subprocess, platform
+            p = platform.system()
+            if p == "Windows":
+                subprocess.Popen(["explorer", str(self._last_output_dir)])
+            elif p == "Darwin":
+                subprocess.Popen(["open", str(self._last_output_dir)])
+            else:
+                subprocess.Popen(["xdg-open", str(self._last_output_dir)])
 
     def _show_error(self, filename, message):
         messagebox.showerror(f"Ошибка: {filename}", message[:500])
