@@ -17,8 +17,8 @@ import requests
 # ---------------------------------------------------------------------------
 # Configuration — update SERVER_URL after deploying to Railway
 # ---------------------------------------------------------------------------
-SERVER_URL = os.getenv("LICENSE_SERVER", "https://doc-converter-license.up.railway.app")
-JWT_SECRET = "REPLACE_WITH_SAME_SECRET_AS_SERVER"  # embedded public secret for offline validation
+SERVER_URL = os.getenv("LICENSE_SERVER", "https://doc-converter-license-production.up.railway.app")
+JWT_SECRET = "c499469ef8a6150565cedfcdd6f20ca9c6f9bab09bbbcdd8c0f93e1c4715d813"
 TOKEN_FILE = Path(os.getenv("APPDATA", Path.home())) / "DocConverter" / "license.json"
 
 TIMEOUT = 8  # seconds
