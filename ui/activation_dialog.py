@@ -2,6 +2,7 @@
 Modal dialog shown when no valid license is found.
 """
 
+import queue
 import threading
 import customtkinter as ctk
 
@@ -22,8 +23,10 @@ class ActivationDialog(ctk.CTkToplevel):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self.activated = False
+        self._queue = queue.Queue()
         self._build_ui()
         self.after(0, self._center)
+        self.after(100, self._poll_queue)
 
     def _center(self):
         self.update_idletasks()
@@ -32,7 +35,7 @@ class ActivationDialog(ctk.CTkToplevel):
         self.geometry(f"+{x}+{y}")
 
     def _build_ui(self):
-        pad = {"padx": 28, "pady": 0}
+        px = 28
 
         ctk.CTkLabel(
             self, text="Требуется активация",
@@ -44,7 +47,7 @@ class ActivationDialog(ctk.CTkToplevel):
             text="Введите лицензионный ключ в формате XXXX-XXXX-XXXX-XXXX",
             text_color="gray",
             wraplength=360,
-        ).pack(**pad, pady=(0, 16))
+        ).pack(padx=px, pady=(0, 16))
 
         self._key_var = ctk.StringVar()
         self._entry = ctk.CTkEntry(
@@ -55,11 +58,11 @@ class ActivationDialog(ctk.CTkToplevel):
             font=ctk.CTkFont(family="Courier New", size=14),
             justify="center",
         )
-        self._entry.pack(**pad, pady=(0, 8))
+        self._entry.pack(padx=px, pady=(0, 8))
         self._entry.bind("<Return>", lambda _: self._on_activate())
 
         self._status = ctk.CTkLabel(self, text="", text_color="gray", height=20)
-        self._status.pack(**pad, pady=(0, 12))
+        self._status.pack(padx=px, pady=(0, 12))
 
         self._btn = ctk.CTkButton(
             self, text="Активировать", width=200, command=self._on_activate
@@ -81,13 +84,23 @@ class ActivationDialog(ctk.CTkToplevel):
 
         threading.Thread(target=self._do_activate, args=(key,), daemon=True).start()
 
+    def _poll_queue(self):
+        try:
+            msg, data = self._queue.get_nowait()
+            if msg == "success":
+                self._on_success()
+            else:
+                self._on_error(data)
+        except queue.Empty:
+            self.after(100, self._poll_queue)
+
     def _do_activate(self, key: str):
         from utils.license_client import activate, ActivationError
         try:
             activate(key)
-            self.after(0, self._on_success)
+            self._queue.put(("success", None))
         except ActivationError as e:
-            self.after(0, self._on_error, str(e))
+            self._queue.put(("error", str(e)))
 
     def _on_success(self):
         self._set_status("Активация успешна!", "#1a7a3e")
