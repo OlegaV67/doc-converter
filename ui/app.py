@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 from pathlib import Path
 from tkinter import filedialog, messagebox
@@ -107,13 +108,38 @@ class App(_AppBase):
         self._build_ui()
 
     def _check_deps(self):
+        import json
+        from pathlib import Path
+        flag_file = Path(os.getenv("APPDATA", Path.home())) / "DocConverter" / "deps_warned.json"
+
         absent = missing_deps()
-        if absent:
-            names = "\n".join(f"  - {d.name}  ({d.install_url})" for d in absent)
-            messagebox.showwarning(
-                "Не найдены зависимости",
-                f"Следующие программы не установлены:\n\n{names}\n\nЧасть форматов будет недоступна.",
-            )
+        if not absent:
+            return
+
+        # Remember which engines were missing last time
+        warned = set()
+        if flag_file.exists():
+            try:
+                warned = set(json.loads(flag_file.read_text()))
+            except Exception:
+                pass
+
+        absent_names = {d.name for d in absent}
+        new_absent = absent_names - warned
+        if not new_absent:
+            return  # already warned about all of these
+
+        names = "\n".join(
+            f"  - {d.name}  ({d.install_url})" for d in absent if d.name in new_absent
+        )
+        messagebox.showwarning(
+            "Не найдены зависимости",
+            f"Следующие программы не установлены:\n\n{names}\n\nЧасть форматов будет недоступна.",
+        )
+
+        # Save updated warned set
+        flag_file.parent.mkdir(parents=True, exist_ok=True)
+        flag_file.write_text(json.dumps(list(absent_names)))
 
     def _build_ui(self):
         self.grid_columnconfigure(0, weight=1)
