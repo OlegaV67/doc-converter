@@ -31,7 +31,8 @@ _SUPPORTED: dict[str, list[str]] = {
     "pptx": ["pdf", "odp"],
     "ppt":  ["pdf", "odp", "pptx"],
     "odp":  ["pdf", "pptx"],
-    "pdf":  ["docx", "odt", "html", "txt"],
+    # PDF как входной формат не поддерживается: LibreOffice открывает PDF
+    # в режиме Draw и не может экспортировать в форматы Writer/Calc.
 }
 
 

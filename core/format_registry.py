@@ -7,10 +7,12 @@ from __future__ import annotations
 from converters.calibre import CalibreConverter
 from converters.libreoffice import LibreOfficeConverter
 from converters.pandoc import PandocConverter
+from converters.pdf import PDFConverter
 from converters.base import BaseConverter
 
 # Порядок определяет приоритет при конфликте
 _CONVERTERS: list[BaseConverter] = [
+    PDFConverter(),
     LibreOfficeConverter(),
     PandocConverter(),
     CalibreConverter(),
