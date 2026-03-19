@@ -1,7 +1,7 @@
 #define AppName "Doc Converter"
 #define AppVersion "1.0.0"
 #define AppPublisher "Doc Converter"
-#define AppExeName "DocConverter.exe"
+#define AppExeName "DocConverter_licensed.exe"
 #define AppURL "https://github.com"
 
 [Setup]
@@ -17,7 +17,7 @@ DefaultGroupName={#AppName}
 AllowNoIcons=yes
 LicenseFile=
 OutputDir=installer_output
-OutputBaseFilename=DocConverter_Setup_v{#AppVersion}
+OutputBaseFilename=DocConverter_Licensed_Setup_v{#AppVersion}
 SetupIconFile=icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
